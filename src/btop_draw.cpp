@@ -1499,7 +1499,7 @@ namespace Net {
 		out.reserve(width * height);
 		const string title_left = Theme::c("net_box") + Fx::ub + Symbols::title_left;
 		const string title_right = Theme::c("net_box") + Fx::ub + Symbols::title_right;
-		const int i_size = min((int)selected_iface.size(), MAX_IFNAMSIZ);
+		const int i_size = min((int)ulen(selected_iface, true), MAX_IFNAMSIZ); // btop-unified: display width, Windows names can be non-ASCII
 		const long long down_max = (net_auto ? safeVal(graph_max, "download"s) : ((long long)(Config::getI("net_download")) << 20) / 8);
 		const long long up_max = (net_auto ? safeVal(graph_max, "upload"s) : ((long long)(Config::getI("net_upload")) << 20) / 8);
 
@@ -1521,7 +1521,7 @@ namespace Net {
 			//? Interface selector and buttons
 
 			out += Mv::to(y, x+width - i_size - 9) + title_left + Fx::b + Theme::c("hi_fg") + Symbols::left + "b " + Theme::c("title")
-				+ uresize(selected_iface, MAX_IFNAMSIZ) + Theme::c("hi_fg") + " n" + Symbols::right + title_right
+				+ uresize(selected_iface, MAX_IFNAMSIZ, true) + Theme::c("hi_fg") + " n" + Symbols::right + title_right
 				+ Mv::to(y, x+width - i_size - 15) + title_left + Theme::c("hi_fg") + (safeVal(net.stat, "download"s).offset + safeVal(net.stat, "upload"s).offset > 0 ? Fx::b : "") + 'z'
 				+ Theme::c("title") + "ero" + title_right;
 			Input::mouse_mappings["b"] = {y, x+width - i_size - 8, 1, 3};

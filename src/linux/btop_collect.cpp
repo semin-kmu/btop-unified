@@ -2530,11 +2530,13 @@ namespace Net {
 					}
 				} //else, ignoring family==AF_PACKET (see man 3 getifaddrs) which is the first one in the `for` loop.
 			}
+			Win::net_ifaces(net, interfaces);
 
 			//? Get total received and transmitted bytes + device address if no ip was found
 			for (const auto& iface : interfaces) {
 				auto& netif = net.at(iface);
-				if (netif.ipv4.empty() and netif.ipv6.empty())
+				const bool win = Win::is_win_iface(iface);
+				if (not win and netif.ipv4.empty() and netif.ipv6.empty())
 					netif.ipv4 = readfile("/sys/class/net/" + iface + "/address");
 
 				for (const string dir : {"download", "upload"}) {
@@ -2542,8 +2544,9 @@ namespace Net {
 					auto& saved_stat = netif.stat.at(dir);
 					auto& bandwidth = netif.bandwidth.at(dir);
 
-					uint64_t val{};
-					try { val = stoull(readfile(sys_file, "0")); }
+					uint64_t val{}, win_speed{};
+					if (win) Win::net_stat(iface, dir == "download", val, win_speed);
+					else try { val = stoull(readfile(sys_file, "0")); }
 					catch (const std::invalid_argument&) {}
 					catch (const std::out_of_range&) {}
 
@@ -2557,6 +2560,7 @@ namespace Net {
 						saved_stat.last = 0;
 					}
 					saved_stat.speed = round((double)(val - saved_stat.last) / ((double)(new_timestamp - timestamp) / 1000));
+					if (win) saved_stat.speed = win_speed; // agent rate, independent of collect timing
 					if (saved_stat.speed > saved_stat.top) saved_stat.top = saved_stat.speed;
 					if (saved_stat.offset > val + saved_stat.rollover) saved_stat.offset = 0;
 					saved_stat.total = (val + saved_stat.rollover) - saved_stat.offset;
