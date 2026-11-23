@@ -1,3 +1,15 @@
+# btop-unified
+
+btop의 비공식 포크입니다. WSL 터미널의 btop 화면 하나에 WSL과 Windows의 CPU·메모리·디스크·네트워크·프로세스를 함께 보여 줍니다.
+
+- 기반: [aristocratos/btop](https://github.com/aristocratos/btop) v1.4.5 (Apache-2.0)
+- 변경 내용과 설계: [UNIFIED.md](UNIFIED.md)
+- Windows 수집기(`btop-agent.exe`): [windows-agent/](windows-agent/)
+
+아래는 원본 btop의 README입니다.
+
+---
+
 # ![btop++](Img/logo.png)
 
 <a href="https://repology.org/project/btop/versions">
