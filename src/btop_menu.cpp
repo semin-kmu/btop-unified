@@ -19,6 +19,7 @@ tab-size = 4
 #include "btop_menu.hpp"
 
 #include "btop_config.hpp"
+#include "btop_windows.hpp"
 #include "btop_draw.hpp"
 #include "btop_shared.hpp"
 #include "btop_theme.hpp"
@@ -924,7 +925,7 @@ namespace Menu {
 			x = Term::width/2 - 40;
 			y = Term::height/2 - 9;
 			bg = Draw::createBox(x + 2, y, 78, 19, Theme::c("hi_fg"), true, "signals");
-			bg += Mv::to(y+2, x+3) + Theme::c("title") + Fx::b + cjust("Send signal to PID " + to_string(s_pid) + " ("
+			bg += Mv::to(y+2, x+3) + Theme::c("title") + Fx::b + cjust("Send signal to PID " + Win::pid_str(s_pid) + " ("
 				+ uresize((s_pid == Config::getI("detailed_pid") ? Proc::detailed.entry.name : Config::getS("selected_name")), 30) + ")", 76);
 		}
 		else if (is_in(key, "escape", "q")) {
@@ -943,8 +944,7 @@ namespace Menu {
 				signalKillRet = ESRCH;
 				menuMask.set(SignalReturn);
 			}
-			else if (kill(s_pid, selected_signal) != 0) {
-				signalKillRet = errno;
+			else if (signalKillRet = Win::send_signal(s_pid, selected_signal); signalKillRet != 0) {
 				menuMask.set(SignalReturn);
 			}
 			return Closed;
@@ -1050,7 +1050,7 @@ namespace Menu {
 				Fx::b + Theme::c("main_fg") + "Send signal: " + Fx::ub + Theme::c("hi_fg") + to_string(signalToSend)
 				+ (signalToSend > 0 and signalToSend <= 32 ? Theme::c("main_fg") + " (" + P_Signals.at(signalToSend) + ')' : ""),
 
-				Fx::b + Theme::c("main_fg") + "To PID: " + Fx::ub + Theme::c("hi_fg") + to_string(s_pid) + Theme::c("main_fg") + " ("
+				Fx::b + Theme::c("main_fg") + "To PID: " + Fx::ub + Theme::c("hi_fg") + Win::pid_str(s_pid) + Theme::c("main_fg") + " ("
 				+ uresize(p_name, 16) + ')' + Fx::reset,
 			};
 			messageBox = Menu::msgBox{50, 1, cont_vec, (signalToSend > 1 and signalToSend <= 32 and signalToSend != 17 ? P_Signals.at(signalToSend) : "signal")};
@@ -1059,8 +1059,7 @@ namespace Menu {
 		auto ret = messageBox.input(key);
 		if (ret == msgBox::Ok_Yes) {
 			signalKillRet = 0;
-			if (kill(s_pid, signalToSend) != 0) {
-				signalKillRet = errno;
+			if (signalKillRet = Win::send_signal(s_pid, signalToSend); signalKillRet != 0) {
 				menuMask.set(SignalReturn);
 			}
 			messageBox.clear();
@@ -1092,6 +1091,12 @@ namespace Menu {
 			}
 			else if (signalKillRet == ESRCH) {
 				cont_vec.push_back("Process not found!" + Fx::reset);
+			}
+			else if (signalKillRet == Win::err_refused) {
+				cont_vec.push_back("Windows: only TERM, KILL or INT!" + Fx::reset);
+			}
+			else if (signalKillRet == Win::err_agent) {
+				cont_vec.push_back(uresize("Windows: " + Win::last_error, 46) + Fx::reset);
 			}
 			else {
 				cont_vec.push_back("Unknown error! (errno: " + to_string(signalKillRet) + ')' + Fx::reset);

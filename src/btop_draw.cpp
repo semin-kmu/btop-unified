@@ -1712,7 +1712,7 @@ namespace Proc {
 				}
 
 				//? Draw structure of details box
-				const string pid_str = to_string(detailed.entry.pid);
+				const string pid_str = Win::pid_str(detailed.entry.pid);
 				out += Mv::to(y, x) + Theme::c("proc_box") + Symbols::div_left + Symbols::h_line + title_left + Theme::c("hi_fg") + Fx::b
 				+ (tty_mode ? "4" : Symbols::superscript.at(4)) + Theme::c("title") + "proc"
 					+ Fx::ub + title_right + Symbols::h_line * (width - 10) + Symbols::div_right
@@ -1880,7 +1880,7 @@ namespace Proc {
 			if (item_fit >= 8) out += cjust(to_string(detailed.entry.p_nice), item_width);
 
 
-			const double mem_p = detailed.mem_bytes.back() * 100.0 / totalMem;
+			const double mem_p = detailed.mem_bytes.back() * 100.0 / (Win::is_win_pid(detailed.entry.pid) and Win::mem_total() > 0 ? Win::mem_total() : totalMem);
 			string mem_str = fmt::format("{:.2f}", mem_p);
 			mem_str.resize(4);
 			if (mem_str.ends_with('.')) mem_str.pop_back();
@@ -1928,6 +1928,8 @@ namespace Proc {
 
 			out += Fx::reset;
 
+			const uint64_t p_total = (Win::is_win_pid(p.pid) and Win::mem_total() > 0 ? Win::mem_total() : totalMem);
+
 			//? Set correct gradient colors if enabled
 			string c_color, m_color, t_color, g_color, end;
 			if (is_selected) {
@@ -1940,7 +1942,7 @@ namespace Proc {
 				if (proc_colors) {
 					end = Theme::c("main_fg") + Fx::ub;
 					array<string, 3> colors;
-					for (int i = 0; int v : {(int)round(p.cpu_p), (int)round(p.mem * 100 / totalMem), (int)p.threads / 3}) {
+					for (int i = 0; int v : {(int)round(p.cpu_p), (int)round(p.mem * 100 / p_total), (int)p.threads / 3}) {
 						if (proc_gradient) {
 							int val = (min(v, 100) + 100) - calc * 100 / select_max;
 							if (val < 100) colors[i++] = Theme::g("proc_color").at(max(0, val));
@@ -1967,19 +1969,19 @@ namespace Proc {
 			//? Normal view line
 			if (not proc_tree) {
 				out += Mv::to(y+2+lc, x+1)
-					+ g_color + rjust(to_string(p.pid), 8) + ' '
-					+ c_color + ljust(p.name, prog_size, true) + ' ' + end
+					+ g_color + rjust(Win::pid_str(p.pid), 8) + ' '
+					+ c_color + uresize(p.name, prog_size, true) + string(max(0, prog_size - (int)ulen(uresize(p.name, prog_size, true), true)), ' ') + ' ' + end
 					+ (cmd_size > 0 ? g_color + ljust(san_cmd, cmd_size, true, p_wide_cmd[p.pid]) + Mv::to(y+2+lc, x+11+prog_size+cmd_size) + ' ' : "");
 			}
 			//? Tree view line
 			else {
-				const string prefix_pid = p.prefix + to_string(p.pid);
+				const string prefix_pid = p.prefix + Win::pid_str(p.pid);
 				int width_left = tree_size;
 				out += Mv::to(y+2+lc, x+1) + g_color + uresize(prefix_pid, width_left) + ' ';
 				width_left -= ulen(prefix_pid);
 				if (width_left > 0) {
-					out += c_color + uresize(p.name, width_left - 1) + end + ' ';
-					width_left -= (ulen(p.name) + 1);
+					out += c_color + uresize(p.name, width_left - 1, true) + end + ' ';
+					width_left -= (ulen(p.name, true) + 1);
 				}
 				if (width_left > 7) {
 					const string_view cmd = width_left > 40 ? rtrim(san_cmd) : p.short_cmd;
@@ -2001,7 +2003,7 @@ namespace Proc {
 			}
 			string mem_str = (mem_bytes ? floating_humanizer(p.mem, true) : "");
 			if (not mem_bytes) {
-				double mem_p = clamp((double)p.mem * 100 / totalMem, 0.0, 100.0);
+				double mem_p = clamp((double)p.mem * 100 / p_total, 0.0, 100.0);
 				mem_str = mem_p < 0.01 ? "0" : fmt::format("{:.1f}", mem_p);
 				if (mem_str.size() > 3) mem_str.resize(3);
 				if (mem_str.ends_with('.')) mem_str.pop_back();

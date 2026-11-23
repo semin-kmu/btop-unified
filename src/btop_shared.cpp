@@ -21,6 +21,7 @@ tab-size = 4
 #include <string>
 
 #include "btop_config.hpp"
+#include "btop_windows.hpp"
 #include "btop_shared.hpp"
 #include "btop_tools.hpp"
 
@@ -168,14 +169,14 @@ namespace Proc {
 			// An incomplete regex throws, see issue https://github.com/aristocratos/btop/issues/1133
 			try {
 				std::regex regex { filter.substr(1), std::regex::extended };
-				return std::regex_search(std::to_string(proc.pid), regex) || std::regex_search(proc.name, regex) ||
+				return std::regex_search(Win::pid_str(proc.pid), regex) || std::regex_search(proc.name, regex) ||
 							 std::regex_match(proc.cmd, regex) || std::regex_search(proc.user, regex);
 			} catch (std::regex_error& /* unused */) {
 				return false;
 			}
 		}
 
-		return s_contains(std::to_string(proc.pid), filter) || s_contains_ic(proc.name, filter) ||
+		return s_contains(Win::pid_str(proc.pid), filter) || s_contains_ic(proc.name, filter) ||
 					 s_contains_ic(proc.cmd, filter) || s_contains_ic(proc.user, filter);
 	}
 

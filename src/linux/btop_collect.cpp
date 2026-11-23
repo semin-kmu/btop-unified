@@ -2697,12 +2697,13 @@ namespace Proc {
 		detailed.entry = *p_info;
 
 		//? Update cpu percent deque for process cpu graph
-		if (not Config::getB("proc_per_core")) detailed.entry.cpu_p *= Shared::coreCount;
+		const bool win = Win::is_win_pid(pid);
+		if (not Config::getB("proc_per_core")) detailed.entry.cpu_p *= (win ? max(1, Win::cores.load()) : Shared::coreCount);
 		detailed.cpu_percent.push_back(clamp((long long)round(detailed.entry.cpu_p), 0ll, 100ll));
 		while (cmp_greater(detailed.cpu_percent.size(), width)) detailed.cpu_percent.pop_front();
 
 		//? Process runtime
-		detailed.elapsed = sec_to_dhms(uptime - (detailed.entry.cpu_s / Shared::clkTck));
+		detailed.elapsed = sec_to_dhms(win ? time_s() - min(time_s(), detailed.entry.cpu_s) : uptime - (detailed.entry.cpu_s / Shared::clkTck));
 		if (detailed.elapsed.size() > 8) detailed.elapsed.resize(detailed.elapsed.size() - 3);
 
 		//? Get parent process name
@@ -2747,7 +2748,7 @@ namespace Proc {
 			detailed.memory = floating_humanizer(detailed.entry.mem);
 		}
 		if (detailed.first_mem == -1 or detailed.first_mem < detailed.mem_bytes.back() / 2 or detailed.first_mem > detailed.mem_bytes.back() * 4) {
-			detailed.first_mem = min((uint64_t)detailed.mem_bytes.back() * 2, Mem::get_totalMem());
+			detailed.first_mem = min((uint64_t)detailed.mem_bytes.back() * 2, win ? Win::mem_total() : Mem::get_totalMem());
 			redraw = true;
 		}
 
@@ -3042,6 +3043,8 @@ namespace Proc {
 					got_detailed = true;
 				}
 			}
+
+			if (Win::procs(current_procs, found, per_core, detailed_pid)) got_detailed = true;
 
 			//? Clear dead processes from current_procs and remove kernel processes if enabled
 			auto eraser = rng::remove_if(current_procs, [&](const auto& element){ return not v_contains(found, element.pid); });
