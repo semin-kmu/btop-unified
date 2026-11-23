@@ -2315,6 +2315,7 @@ namespace Mem {
 			}
 		}
 
+		Win::mem(mem, show_disks);
 		return mem;
 	}
 

@@ -1175,6 +1175,8 @@ namespace Mem {
 	std::unordered_map<string, Draw::Meter> disk_meters_free;
 	std::unordered_map<string, Draw::Graph> io_graphs;
 
+	const array win_names { "win_used"s, "win_available"s, "win_cached"s, "win_free"s };
+
 	string draw(const mem_info& mem, bool force_redraw, bool data_same) {
 		if (Runner::stopping) return "";
 		if (force_redraw) redraw = true;
@@ -1189,6 +1191,7 @@ namespace Mem {
 		auto& graph_symbol = (tty_mode ? "tty" : Config::getS("graph_symbol_mem"));
 		auto& graph_bg = Symbols::graph_symbols.at((graph_symbol == "default" ? Config::getS("graph_symbol") + "_up" : graph_symbol + "_up")).at(6);
 		auto totalMem = Mem::get_totalMem();
+		const bool show_win = Win::shown() and mem.percent.contains("win_used") and not mem.percent.at("win_used").empty();
 		string out;
 		out.reserve(height * width);
 
@@ -1217,6 +1220,14 @@ namespace Mem {
 						mem_meters[name] = Draw::Meter{mem_meter, name.substr(5)};
 				}
 			}
+			if (show_win) {
+				for (const auto& name : win_names) {
+					if (use_graphs)
+						mem_graphs[name] = Draw::Graph{mem_meter, graph_height, name.substr(4), safeVal(mem.percent, name), graph_symbol};
+					else
+						mem_meters[name] = Draw::Meter{mem_meter, name.substr(4)};
+				}
+			}
 
 			//? Disk meters and io graphs
 			if (show_disks) {
@@ -1243,7 +1254,9 @@ namespace Mem {
 					for (const auto& [name, disk] : mem.disks) {
 						if (disk.io_read.empty()) continue;
 
-						io_graphs[name + "_activity"] = Draw::Graph{disks_width - 6, 1, "available", disk.io_activity, graph_symbol};
+						//? Windows drives have no IO activity percentage
+						if (not disk.io_activity.empty())
+							io_graphs[name + "_activity"] = Draw::Graph{disks_width - 6, 1, "available", disk.io_activity, graph_symbol};
 
 						if (io_mode) {
 							//? Create one combined graph for IO read/write if enabled
@@ -1290,25 +1303,58 @@ namespace Mem {
 		string up = (graph_height >= 2 ? Mv::l(mem_width - 2) + Mv::u(graph_height - 1) : "");
 		bool big_mem = mem_width > 21;
 
-		out += Mv::to(y + 1, x + 2) + Theme::c("title") + Fx::b + "Total:" + rjust(floating_humanizer(totalMem), mem_width - 9) + Fx::ub + Theme::c("main_fg");
-		vector<string> comb_names (mem_names.begin(), mem_names.end());
-		if (show_swap and has_swap and not swap_disk) comb_names.insert(comb_names.end(), swap_names.begin(), swap_names.end());
+		const string total_label = (Win::shown() ? "WSL:" : "Total:");
+		out += Mv::to(y + 1, x + 2) + Theme::c("title") + Fx::b + total_label + rjust(floating_humanizer(totalMem), mem_width - 3 - total_label.size()) + Fx::ub + Theme::c("main_fg");
+		auto names_for = [&](int k_wsl, int k_win) {
+			vector<string> names (mem_names.begin(), mem_names.begin() + k_wsl);
+			if (show_swap and has_swap and not swap_disk) names.insert(names.end(), swap_names.begin(), swap_names.end());
+			if (show_win) names.insert(names.end(), win_names.begin(), win_names.begin() + k_win);
+			return names;
+		};
+		vector<string> comb_names = names_for(mem_names.size(), win_names.size());
+		if (show_win) {
+			//? btop-unified: if both sections don't fit, drop items from the end (Free, Cached, Available) alternately Windows/WSL
+			const int item_rows = (mem_size > 2 ? (graph_height == 0 ? 2 : graph_height + 1) : (graph_height == 0 ? 1 : graph_height));
+			auto fits = [&](const vector<string>& names) {
+				int sy = 1;
+				for (const auto& name : names) {
+					if (sy > height - 4) return false;
+					if (name == "swap_used" or name == "win_used") {
+						if (sy > height - 5) return false;
+						if (height - sy > 6) sy++;
+						sy++;
+					}
+					sy += item_rows;
+				}
+				return true;
+			};
+			for (int k_wsl = 4, k_win = 4; not fits(comb_names) and k_wsl > 1;) {
+				if (k_wsl == k_win) k_win--;
+				else k_wsl--;
+				comb_names = names_for(k_wsl, k_win);
+			}
+		}
 		for (const auto& name : comb_names) {
 			if (cy > height - 4) break;
 			string title;
-			if (name == "swap_used") {
+			if (name == "swap_used" or name == "win_used") {
 				if (cy > height - 5) break;
 				if (height - cy > 6) {
 					if (graph_height > 0) out += Mv::to(y+1+cy, x+1+cx) + divider;
 					cy += 1;
 				}
-				out += Mv::to(y+1+cy, x+1+cx) + Theme::c("title") + Fx::b + "Swap:" + rjust(floating_humanizer(safeVal(mem.stats, "swap_total"s)), mem_width - 8)
+				const bool win = name == "win_used";
+				const string label = (win ? (mem_width > 20 ? "Windows:" : "Win:") : "Swap:");
+				out += Mv::to(y+1+cy, x+1+cx) + Theme::c("title") + Fx::b + label
+					+ rjust(floating_humanizer(safeVal(mem.stats, (win ? "win_total"s : "swap_total"s))), mem_width - 3 - label.size())
 					+ Theme::c("main_fg") + Fx::ub;
 				cy += 1;
 				title = "Used";
 			}
 			else if (name == "swap_free")
 				title = "Free";
+			else if (name.starts_with("win_"))
+				title = capitalize(name.substr(4));
 
 			if (title.empty()) title = capitalize(name);
 			const string humanized = floating_humanizer(safeVal(mem.stats, name));
@@ -2228,8 +2274,10 @@ namespace Draw {
 			else
 				mem_width = width - 1;
 
-			item_height = has_swap and not swap_disk ? 6 : 4;
-			if (height - (has_swap and not swap_disk ? 3 : 2) > 2 * item_height)
+			//? btop-unified: Windows section = header + 4 items, like the swap section
+			const int mem_headers = (has_swap and not swap_disk) + Win::shown();
+			item_height = (has_swap and not swap_disk ? 6 : 4) + (Win::shown() ? 4 : 0);
+			if (height - 2 - mem_headers > 2 * item_height)
 				mem_size = 3;
 			else if (mem_width > 25)
 				mem_size = 2;
@@ -2240,7 +2288,7 @@ namespace Draw {
 			if (mem_size == 1) mem_meter += 6;
 
 			if (mem_graphs) {
-				graph_height = max(1, (int)round((double)((height - (has_swap and not swap_disk ? 2 : 1)) - (mem_size == 3 ? 2 : 1) * item_height) / item_height));
+				graph_height = max(1, (int)round((double)((height - 1 - mem_headers) - (mem_size == 3 ? 2 : 1) * item_height) / item_height));
 				if (graph_height > 1) mem_meter += 6;
 			}
 			else
