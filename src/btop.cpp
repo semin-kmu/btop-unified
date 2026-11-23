@@ -50,6 +50,7 @@ tab-size = 4
 #include "btop_shared.hpp"
 #include "btop_tools.hpp"
 #include "btop_config.hpp"
+#include "btop_windows.hpp"
 #include "btop_input.hpp"
 #include "btop_theme.hpp"
 #include "btop_draw.hpp"
@@ -210,6 +211,8 @@ void clean_quit(int sig) {
 		}
 	#endif
 	}
+
+	Win::stop();
 
 #ifdef GPU_SUPPORT
 	Gpu::Nvml::shutdown();
@@ -498,6 +501,13 @@ namespace Runner {
 			}
 
 			output.clear();
+
+			//? Windows snapshot for this cycle, recalculate box sizes if Windows data appeared or disappeared
+			if (not conf.no_update and Win::refresh()) {
+				Global::resized = true;
+				Input::interrupt();
+				continue;
+			}
 
 			//* Run collection and draw functions for all boxes
 			try {
@@ -1026,6 +1036,8 @@ int main(const int argc, const char** argv) {
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGUSR1);
 	pthread_sigmask(SIG_BLOCK, &mask, &Input::signal_mask);
+
+	Win::start();
 
 	if (pthread_create(&Runner::runner_id, nullptr, &Runner::_runner, nullptr) != 0) {
 		Global::exit_error_msg = "Failed to create _runner thread!";

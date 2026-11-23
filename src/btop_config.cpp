@@ -210,6 +210,10 @@ namespace Config {
 
 		{"log_level", 			"#* Set loglevel for \"~/.config/btop/btop.log\" levels are: \"ERROR\" \"WARNING\" \"INFO\" \"DEBUG\".\n"
 								"#* The level set includes all lower levels, i.e. \"DEBUG\" will show all logging info."},
+
+		{"windows_source",		"#* (btop-unified) Show Windows data from btop-agent.exe together with the WSL data."},
+
+		{"windows_agent",		"#* (btop-unified) Path to btop-agent.exe, the BTOP_AGENT environment variable overrides it."},
 	#ifdef GPU_SUPPORT
 
 		{"nvml_measure_pcie_speeds",
@@ -237,6 +241,7 @@ namespace Config {
 		{"graph_symbol_net", "default"},
 		{"graph_symbol_proc", "default"},
 		{"proc_sorting", "cpu lazy"},
+		{"windows_agent", "~/.local/share/btop-unified/btop-agent.exe"},
 		{"cpu_graph_upper", "Auto"},
 		{"cpu_graph_lower", "Auto"},
 		{"cpu_sensor", "Auto"},
@@ -266,6 +271,7 @@ namespace Config {
 	std::unordered_map<std::string_view, string> stringsTmp;
 
 	std::unordered_map<std::string_view, bool> bools = {
+		{"windows_source", true},
 		{"theme_background", true},
 		{"truecolor", true},
 		{"rounded_corners", true},

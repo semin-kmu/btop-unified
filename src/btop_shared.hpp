@@ -217,9 +217,11 @@ namespace Cpu {
 			{"softirq", {}},
 			{"steal", {}},
 			{"guest", {}},
-			{"guest_nice", {}}
+			{"guest_nice", {}},
+			{"win-total", {}}
 		};
 		vector<deque<long long>> core_percent;
+		vector<deque<long long>> win_core_percent;
 		vector<deque<long long>> temp;
 		long long temp_max = 0;
 		array<double, 3> load_avg;
