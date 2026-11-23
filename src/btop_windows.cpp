@@ -40,6 +40,13 @@ namespace Win {
 	string last_error;
 
 	namespace {
+		//? Rejects nan/inf so they never reach clamp() or the process sorter
+		double stod_fin(const string& v) {
+			const double d = std::stod(v);
+			if (not std::isfinite(d)) throw std::invalid_argument("non-finite number");
+			return d;
+		}
+
 		struct Disk { string mount, fs; uint64_t total{}, free{}, rbps{}, wbps{}; };
 		struct Iface { string name, ipv4; bool up{}; uint64_t rx_bps{}, tx_bps{}, rx_total{}, tx_total{}; };
 		struct WProc { size_t pid{}, ppid{}; string name, user, cmd; size_t threads{}; uint64_t mem{}, cpu_ms{}, start{}; double cpu{}; int prio{}; };
@@ -204,11 +211,11 @@ namespace Win {
 				const auto f = split_tab(line);
 				const auto& t = f[0];
 				if (t == "cpu" and f.size() >= 5) {
-					s->total = stod(f[1]);
+					s->total = stod_fin(f[1]);
 					got_cpu = true;
 				}
 				else if (t == "cores" and f.size() >= 2) {
-					for (const auto& v : ssplit(f[1], ',')) s->core_pct.push_back(clamp(std::llround(stod(v)), 0ll, 100ll));
+					for (const auto& v : ssplit(f[1], ',')) s->core_pct.push_back(clamp(std::llround(stod_fin(v)), 0ll, 100ll));
 					if (s->core_pct.size() > 1024) return nullptr;
 				}
 				else if (t == "mem" and f.size() >= 8) {
@@ -222,7 +229,7 @@ namespace Win {
 					s->nets.push_back({sanitize(f[1]), sanitize(f[2]), f[3] == "1", stoull(f[4]), stoull(f[5]), stoull(f[6]), stoull(f[7])});
 				else if (t == "proc" and f.size() >= 12) {
 					WProc p{stoull(f[1]), stoull(f[2]), sanitize(f[3]), sanitize(f[4]), sanitize(f[11]), stoull(f[5]),
-							stoull(f[6]), stoull(f[8]), stoull(f[9]), stod(f[7]), stoi(f[10])};
+							stoull(f[6]), stoull(f[8]), stoull(f[9]), stod_fin(f[7]), stoi(f[10])};
 					//? Like stock btop skipping processes without a readable name; fall back to the executable from cmd
 					if (p.name.empty() and not p.cmd.empty()) {
 						const auto exe = p.cmd.substr(0, p.cmd.find(p.cmd.front() == '"' ? '"' : ' ', 1));
