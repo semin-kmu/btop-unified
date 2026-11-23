@@ -852,6 +852,13 @@ int main(const int argc, const char** argv) {
 				Config::conf_file = cli.config_file.value();
 			} else {
 				Config::conf_file = Config::conf_dir / "btop.conf";
+				//? First run: start from a copy of the stock btop config (only read, never written)
+				std::error_code ec;
+				const auto xdg = std::getenv("XDG_CONFIG_HOME");
+				const auto home = std::getenv("HOME");
+				const fs::path stock = xdg != nullptr ? fs::path(xdg) / "btop/btop.conf" : fs::path(home != nullptr ? home : "") / ".config/btop/btop.conf";
+				if (not fs::exists(Config::conf_file, ec) and fs::is_regular_file(stock, ec))
+					fs::copy_file(stock, Config::conf_file, ec);
 			}
 			Logger::logfile = Config::get_log_file();
 			Theme::user_theme_dir = Config::conf_dir / "themes";

@@ -342,12 +342,12 @@ namespace Config {
 			std::error_code error;
 			if (const auto xdg_config_home = std::getenv("XDG_CONFIG_HOME"); xdg_config_home != nullptr) {
 				if (fs::exists(xdg_config_home, error)) {
-					config_dir = fs::path(xdg_config_home) / "btop";
+					config_dir = fs::path(xdg_config_home) / "btop-unified";
 				}
 			} else if (const auto home = std::getenv("HOME"); home != nullptr) {
 				error.clear();
 				if (fs::exists(home, error)) {
-					config_dir = fs::path(home) / ".config" / "btop";
+					config_dir = fs::path(home) / ".config" / "btop-unified";
 				}
 				if (error) {
 					fmt::print(stderr, "\033[0;31mWarning: \033[0m{} could not be accessed: {}\n", config_dir.string(), error.message());
@@ -814,7 +814,7 @@ namespace Config {
 	auto get_log_file() -> std::optional<std::filesystem::path> {
 		auto xdg_state_home = get_xdg_state_dir();
 		if (xdg_state_home.has_value()) {
-			return std::make_optional(std::filesystem::path(xdg_state_home.value()) / "btop.log");
+			return std::make_optional(std::filesystem::path(xdg_state_home.value()) / "btop-unified.log");
 		}
 		return std::nullopt;
 	}
