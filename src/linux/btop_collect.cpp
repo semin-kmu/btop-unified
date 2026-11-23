@@ -45,6 +45,7 @@ tab-size = 4
 #include "../btop_shared.hpp"
 #include "../btop_config.hpp"
 #include "../btop_tools.hpp"
+#include "../btop_windows.hpp"
 
 #if defined(GPU_SUPPORT)
 	#define class class_
@@ -1067,6 +1068,7 @@ namespace Cpu {
 		if (Config::getB("show_cpu_watts") and supports_watts)
 			current_cpu.usage_watts = get_cpuConsumptionWatts();
 
+		Win::cpu(cpu);
 		return cpu;
 	}
 }

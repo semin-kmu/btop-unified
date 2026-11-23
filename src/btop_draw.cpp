@@ -27,6 +27,7 @@ tab-size = 4
 
 #include "btop_draw.hpp"
 #include "btop_config.hpp"
+#include "btop_windows.hpp"
 #include "btop_theme.hpp"
 #include "btop_shared.hpp"
 #include "btop_tools.hpp"
@@ -551,15 +552,27 @@ namespace Cpu {
 	#else
 		(void)gpus;
 	#endif
+		//? btop-unified: Windows cores are listed after the WSL cores, "win-total" is the default lower graph
+		const int win_cores = Win::cores;
+		const int total_cores = Shared::coreCount + win_cores;
+		static const deque<long long> no_data;
+		auto core_data = [&](int n) -> const deque<long long>& {
+			if (n < Shared::coreCount) return cmp_less(n, cpu.core_percent.size()) ? cpu.core_percent[n] : no_data;
+			n -= Shared::coreCount;
+			return cmp_less(n, cpu.win_core_percent.size()) ? cpu.win_core_percent[n] : no_data;
+		};
+		auto field_ok = [&](const string& field) { return v_contains(Cpu::available_fields, field) and (field != "win-total" or win_cores > 0); };
+		auto field_label = [&](const string& field) -> string { return field == "win-total" ? "win" : (field == "total" and win_cores > 0 ? "wsl" : field); };
+
 		auto graph_up_field = Config::getS("cpu_graph_upper");
-		if (graph_up_field == "Auto" or not v_contains(Cpu::available_fields, graph_up_field))
+		if (graph_up_field == "Auto" or not field_ok(graph_up_field))
 			graph_up_field = "total";
 		auto graph_lo_field = Config::getS("cpu_graph_lower");
-		if (graph_lo_field == "Auto" or not v_contains(Cpu::available_fields, graph_lo_field)) {
+		if (graph_lo_field == "Auto" or not field_ok(graph_lo_field)) {
 		#ifdef GPU_SUPPORT
-			graph_lo_field = show_gpu ? "gpu-totals" : graph_up_field;
+			graph_lo_field = win_cores > 0 ? "win-total" : show_gpu ? "gpu-totals" : graph_up_field;
 		#else
-			graph_lo_field = graph_up_field;
+			graph_lo_field = win_cores > 0 ? "win-total" : graph_up_field;
 		#endif
 		}
 		auto tty_mode = Config::getB("tty_mode");
@@ -692,14 +705,14 @@ namespace Cpu {
 			if (mid_line) {
 				out += Mv::to(y + graph_up_height + 1, x) + Fx::ub + Theme::c("cpu_box") + Symbols::div_left + Theme::c("div_line")
 					+ Symbols::h_line * (width - b_width - 2) + Symbols::div_right
-					+ Mv::to(y + graph_up_height + 1, x + ((width - b_width) / 2) - ((graph_up_field.size() + graph_lo_field.size()) / 2) - 4)
-					+ Theme::c("main_fg") + graph_up_field + Mv::r(1) + "▲▼" + Mv::r(1) + graph_lo_field;
+					+ Mv::to(y + graph_up_height + 1, x + ((width - b_width) / 2) - ((field_label(graph_up_field).size() + field_label(graph_lo_field).size()) / 2) - 4)
+					+ Theme::c("main_fg") + field_label(graph_up_field) + Mv::r(1) + "▲▼" + Mv::r(1) + field_label(graph_lo_field);
 			}
 
 			if (b_column_size > 0 or extra_width > 0) {
 				core_graphs.clear();
-				for (const auto& core_data : cpu.core_percent) {
-					core_graphs.emplace_back(5 * b_column_size + extra_width, 1, "cpu", core_data, graph_symbol);
+				for (const auto& n : iota(0, total_cores)) {
+					core_graphs.emplace_back(5 * b_column_size + extra_width, 1, "cpu", core_data(n), graph_symbol);
 				}
 			}
 
@@ -817,7 +830,7 @@ namespace Cpu {
 				out += Mv::to(b_y, b_x + b_width - 10) + Fx::ub + Theme::c("div_line") + Symbols::h_line * (7 - cpuHz.size())
 					+ Symbols::title_left + Fx::b + Theme::c("title") + cpuHz + Fx::ub + Theme::c("div_line") + Symbols::title_right;
 
-		out += Mv::to(b_y + 1, b_x + 1) + Theme::c("main_fg") + Fx::b + "CPU " + cpu_meter(safeVal(cpu.cpu_percent, "total"s).back())
+		out += Mv::to(b_y + 1, b_x + 1) + Theme::c("main_fg") + Fx::b + (win_cores > 0 ? "WSL " : "CPU ") + cpu_meter(safeVal(cpu.cpu_percent, "total"s).back())
 			+ Theme::g("cpu").at(clamp(safeVal(cpu.cpu_percent, "total"s).back(), 0ll, 100ll)) + rjust(to_string(safeVal(cpu.cpu_percent, "total"s).back()), 4) + Theme::c("main_fg") + '%';
 		if (show_temps) {
 			const auto [temp, unit] = celsius_to(safeVal(cpu.temp, 0).back(), temp_scale);
@@ -837,6 +850,13 @@ namespace Cpu {
 		}
 
 			out += Theme::c("div_line") + Symbols::v_line;
+
+			if (win_cores > 0) {
+				const auto& win_total = safeVal(cpu.cpu_percent, "win-total"s);
+				const long long val = (win_total.empty() ? 0 : win_total.back());
+				out += Mv::to(b_y + 2, b_x + 1) + Theme::c("main_fg") + Fx::b + "WIN " + cpu_meter(val)
+					+ Theme::g("cpu").at(clamp(val, 0ll, 100ll)) + rjust(to_string(val), 4) + Theme::c("main_fg") + '%';
+			}
 		} catch (const std::exception& e) {
 			throw std::runtime_error("graphs, clock, meter : " + string{e.what()});
 		}
@@ -849,19 +869,25 @@ namespace Cpu {
 		max_row -= n_gpus_to_show;
 
 		//? Core text and graphs
-		int cx = 0, cy = 1, cc = 0, core_width = (b_column_size == 0 ? 2 : 3);
+		const int cy0 = 1 + (win_cores > 0);
+		int cx = 0, cy = cy0, cc = 0, core_width = (b_column_size == 0 ? 2 : 3);
 		if (Shared::coreCount >= 100) core_width++;
-		for (const auto& n : iota(0, Shared::coreCount)) {
-			out += Mv::to(b_y + cy + 1, b_x + cx + 1) + Theme::c("main_fg") + (Shared::coreCount < 100 ? Fx::b + 'C' + Fx::ub : "")
-				+ ljust(to_string(n), core_width);
+		for (const auto& n : iota(0, total_cores)) {
+			const bool win = n >= Shared::coreCount;
+			const auto& data = core_data(n);
+			const long long val = (data.empty() ? 0 : data.back());
+			out += Mv::to(b_y + cy + 1, b_x + cx + 1) + Theme::c("main_fg") + (Shared::coreCount < 100 ? Fx::b + (win ? 'W' : 'C') + Fx::ub : "")
+				+ ljust(to_string(win ? n - Shared::coreCount : n), core_width);
 			if ((b_column_size > 0 or extra_width > 0) and cmp_less(n, core_graphs.size()))
 				out += Theme::c("inactive_fg") + graph_bg * (5 * b_column_size + extra_width) + Mv::l(5 * b_column_size + extra_width)
-					+ core_graphs.at(n)(safeVal(cpu.core_percent, n), data_same or redraw);
+					+ core_graphs.at(n)(data, data_same or redraw);
 
-			out += Theme::g("cpu").at(clamp(safeVal(cpu.core_percent, n).back(), 0ll, 100ll));
-			out += rjust(to_string(safeVal(cpu.core_percent, n).back()), (b_column_size < 2 ? 3 : 4)) + Theme::c("main_fg") + '%';
+			out += Theme::g("cpu").at(clamp(val, 0ll, 100ll));
+			out += rjust(to_string(val), (b_column_size < 2 ? 3 : 4)) + Theme::c("main_fg") + '%';
 
-			if (show_temps and not hide_cores) {
+			if (show_temps and not hide_cores and win) //? no Windows core temperatures, keep the column width
+				out += string((b_column_size > 1 ? 6 : 0) + 4 + ulen(std::get<1>(celsius_to(0, temp_scale))), ' ');
+			else if (show_temps and not hide_cores) {
 				const auto [temp, unit] = celsius_to(safeVal(cpu.temp, n+1).back(), temp_scale);
 				const auto temp_color = Theme::g("temp").at(clamp(safeVal(cpu.temp, n+1).back() * 100 / cpu.temp_max, 0ll, 100ll));
 				if (b_column_size > 1 and std::cmp_greater_equal(temp_graphs.size(), n))
@@ -872,9 +898,9 @@ namespace Cpu {
 
 			out += Theme::c("div_line") + Symbols::v_line;
 
-			if ((++cy > ceil((double)Shared::coreCount / b_columns) or cy == max_row) and n != Shared::coreCount - 1) {
+			if ((++cy > ceil((double)total_cores / b_columns) + cy0 - 1 or cy == max_row) and n != total_cores - 1) {
 				if (++cc >= b_columns) break;
-				cy = 1; cx = (b_width / b_columns) * cc;
+				cy = cy0; cx = (b_width / b_columns) * cc;
 			}
 		}
 
@@ -2076,10 +2102,17 @@ namespace Draw {
 			y = cpu_bottom ? Term::height - height + 1 : 1;
 
 		#ifdef GPU_SUPPORT
+			const int extra_rows = gpus_extra_height;
 			b_columns = max(2, (int)ceil((double)(Shared::coreCount + 1) / (height - gpus_extra_height - 5)));
 		#else
+			const int extra_rows = 0;
 			b_columns = max(1, (int)ceil((double)(Shared::coreCount + 1) / (height - 5)));
 		#endif
+			//? btop-unified: Windows cores after the WSL cores and one more row for the WIN total meter
+			const int win_cores = Win::cores, win_row = (win_cores > 0);
+			const int total_cores = Shared::coreCount + win_cores;
+			if (win_cores > 0)
+				b_columns = max(b_columns, (int)ceil((double)total_cores / max(1, height - extra_rows - 7)));
 			if (b_columns * (21 + 12 * show_temp) < width - (width / 3)) {
 				b_column_size = 2;
 				b_width = (21 + 12 * show_temp) * b_columns - (b_columns - 1);
@@ -2097,12 +2130,7 @@ namespace Draw {
 			}
 
 			if (b_column_size == 0) b_width = (8 + 6 * show_temp) * b_columns + 1;
-		#ifdef GPU_SUPPORT
-			//gpus_extra_height = max(0, gpus_extra_height - 1);
-			b_height = min(height - 2, (int)ceil((double)Shared::coreCount / b_columns) + 4 + gpus_extra_height);
-		#else
-			b_height = min(height - 2, (int)ceil((double)Shared::coreCount / b_columns) + 4);
-		#endif
+			b_height = min(height - 2, (int)ceil((double)total_cores / b_columns) + 4 + win_row + extra_rows);
 
 			b_x = x + width - b_width - 1;
 			b_y = y + ceil((double)(height - 2) / 2) - ceil((double)b_height / 2) + 1;
