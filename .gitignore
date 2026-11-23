@@ -88,3 +88,7 @@ CMakeUserPresets.json
 
 # CLion
 cmake-build-*
+
+# Windows agent build output
+/windows-agent/bin/
+/windows-agent/build/
